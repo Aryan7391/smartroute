@@ -63,11 +63,9 @@ def arrived_at_stop(stop_id: str, user=Depends(get_current_user)):
 
     # Notify sender or receiver
     if s["type"] == "pickup":
-        notify_sender_driver_coming(order["users"]["phone"], order["id"])
+      notify_sender_driver_coming(order["users"]["phone"], order["id"])
     elif s["type"] == "delivery":
-        # Get receiver phone from delivery info
-        # For now notify sender — receiver notification needs receiver phone on order
-        notify_receiver_driver_coming(order["users"]["phone"], order["id"])
+      notify_receiver_driver_coming(order["receiver_phone"], order["id"])
 
     return {"message": "Arrival recorded", "stop_type": s["type"], "order_id": order["id"]}
 

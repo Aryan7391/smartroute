@@ -123,6 +123,9 @@ create table orders (
   delivery_otp        text,           -- generated only after pickup is confirmed
   receiver_phone      text,          -- for WhatsApp notification and driver call           -- generated only after pickup is confirmed
   receiver_name       text,
+  item_count          int not null check (item_count > 0),
+  approx_weight       float not null check (approx_weight > 0), -- in kg
+  item_description     text,
   -- State
   status              order_status not null default 'pending',
   attempt_count       int not null default 0 check (attempt_count >= 0),

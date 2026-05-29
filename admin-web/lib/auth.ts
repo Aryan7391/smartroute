@@ -3,6 +3,11 @@ import api from './api';
 export const login = async (phone: string, password: string) => {
   const res = await api.post('/auth/login', { phone, password });
   const { access_token, role, name, user_id } = res.data;
+
+  if (role !== 'admin' && role !== 'manager') {
+    throw new Error('Access denied. Admin or Manager accounts only.');
+  }
+
   localStorage.setItem('token', access_token);
   localStorage.setItem('role', role);
   localStorage.setItem('name', name);

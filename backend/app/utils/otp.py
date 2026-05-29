@@ -1,6 +1,4 @@
-import random
-import string
+import secrets
 
 def generate_otp(length: int = 6) -> str:
-    """Generate a numeric OTP of given length."""
-    return "".join(random.choices(string.digits, k=length))
+    return "".join(str(secrets.randbelow(10)) for _ in range(length))

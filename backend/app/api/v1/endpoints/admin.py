@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.core.dependencies import require_admin, require_admin_manager
 from app.db.client import supabase
 from pydantic import BaseModel
+from app.schemas.auth import RegisterRequest
+from app.services.auth import register_user
 from typing import Optional
 
 router = APIRouter()
@@ -92,3 +94,7 @@ def reschedule(order_id: str, user=Depends(require_admin_manager)):
 def charge_extra(order_id: str, user=Depends(require_admin_manager)):
     # Plug into payment module when ready
     return {"message": f"Extra charge flagged for order {order_id} — payment module pending"}
+
+@router.post("/users/create", summary="Create admin/manager/driver account (admin only)")
+def create_user(data: RegisterRequest, user=Depends(require_admin)):
+    return register_user(data)

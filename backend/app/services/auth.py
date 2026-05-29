@@ -4,6 +4,23 @@ from app.schemas.auth import RegisterRequest, LoginRequest
 from fastapi import HTTPException, status
 
 def register_user(data: RegisterRequest) -> dict:
+    existing = supabase.table("users").select("id").eq("phone", data.phone).execute()
+    if existing.data:
+        raise HTTPException(status_code=400, detail="Phone number already registered")
+
+    # Drivers start inactive — need admin approval
+    is_active = data.role.value != "driver"
+
+    user = supabase.table("users").insert({
+        "name":          data.name,
+        "phone":         data.phone,
+        "email":         data.email,
+        "password_hash": hash_password(data.password),
+        "role":          data.role.value,
+        "is_active":     is_active,
+    }).execute()
+
+    return user.data[0]
     # Check phone not already taken
     existing = supabase.table("users").select("id").eq("phone", data.phone).execute()
     if existing.data:
@@ -30,7 +47,9 @@ def login_user(data: LoginRequest) -> dict:
     user = result.data[0]
 
     if not user["is_active"]:
-        raise HTTPException(status_code=403, detail="Account is deactivated")
+      if user["role"] == "driver":
+        raise HTTPException(status_code=403, detail="Account pending admin approval")
+      raise HTTPException(status_code=403, detail="Account is deactivated")
 
     if not verify_password(data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid phone or password")

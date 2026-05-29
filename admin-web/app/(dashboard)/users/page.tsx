@@ -3,14 +3,15 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { User, Session } from '@/types';
-import { Users, Shield, LogOut, UserX, UserCheck, Plus, X } from 'lucide-react';
+import { Users, Shield, LogOut, UserX, UserCheck, Plus, X, CheckCircle, Clock } from 'lucide-react';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [pending, setPending] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
-  const [tab, setTab] = useState<'managers' | 'sessions'>('managers');
+  const [tab, setTab] = useState<'managers' | 'sessions' | 'pending'>('managers');
   const [showAdd, setShowAdd] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', phone: '', password: '', email: '' });
   const [addLoading, setAddLoading] = useState(false);
@@ -27,7 +28,9 @@ export default function UsersPage() {
         api.get('/admin/users'),
         api.get('/admin/sessions'),
       ]);
-      setUsers(usersRes.data.filter((u: User) => u.role === 'manager'));
+      const allUsers = usersRes.data;
+      setUsers(allUsers.filter((u: User) => u.role === 'manager'));
+      setPending(allUsers.filter((u: User) => u.role === 'driver' && !u.is_active));
       setSessions(sessionsRes.data);
     } catch (err) {
       console.error(err);
@@ -60,6 +63,27 @@ export default function UsersPage() {
     }
   };
 
+  const approve = async (userId: string) => {
+    try {
+      await api.patch(`/admin/users/${userId}`, { is_active: true });
+      showMessage('Driver approved successfully');
+      fetchData();
+    } catch (err: any) {
+      showMessage(err.response?.data?.detail || 'Failed');
+    }
+  };
+
+  const reject = async (userId: string) => {
+    if (!confirm('Reject and delete this driver account?')) return;
+    try {
+      await api.patch(`/admin/users/${userId}`, { is_active: false });
+      showMessage('Driver rejected');
+      fetchData();
+    } catch (err: any) {
+      showMessage(err.response?.data?.detail || 'Failed');
+    }
+  };
+
   const kickSession = async (sessionId: string) => {
     try {
       await api.delete(`/admin/sessions/${sessionId}`);
@@ -84,7 +108,7 @@ export default function UsersPage() {
   const addManager = async () => {
     setAddLoading(true);
     try {
-      await api.post('/auth/register', { ...newUser, role: 'manager' });
+      await api.post('/admin/users/create', { ...newUser, role: 'manager' });
       showMessage('Manager added successfully');
       setShowAdd(false);
       setNewUser({ name: '', phone: '', password: '', email: '' });
@@ -96,14 +120,20 @@ export default function UsersPage() {
     }
   };
 
-  const formatDate = (d: string) => new Date(d).toLocaleString();
+  const formatDate = (d?: string) => d ? new Date(d).toLocaleString() : '—';
+
+  const tabs = [
+    { key: 'managers' as const, label: `Managers (${users.length})` },
+    { key: 'pending'  as const, label: `Pending Drivers (${pending.length})`, alert: pending.length > 0 },
+    { key: 'sessions' as const, label: `Sessions (${sessions.length})` },
+  ];
 
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Users</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Manage managers and active sessions</p>
+          <p className="text-sm text-gray-500 mt-0.5">Manage managers, drivers and active sessions</p>
         </div>
         <button
           onClick={() => setShowAdd(true)}
@@ -136,7 +166,7 @@ export default function UsersPage() {
                     type={field === 'password' ? 'password' : 'text'}
                     value={newUser[field as keyof typeof newUser]}
                     onChange={e => setNewUser({ ...newUser, [field]: e.target.value })}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               ))}
@@ -154,14 +184,17 @@ export default function UsersPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg w-fit">
-        {(['managers', 'sessions'] as const).map(t => (
+        {tabs.map(t => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors capitalize
-              ${tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2
+              ${tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
-            {t} {t === 'sessions' && `(${sessions.length})`}
+            {t.label}
+            {t.alert && (
+              <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+            )}
           </button>
         ))}
       </div>
@@ -170,6 +203,7 @@ export default function UsersPage() {
         <div className="flex items-center justify-center h-48">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
         </div>
+
       ) : tab === 'managers' ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {users.length === 0 ? (
@@ -229,6 +263,61 @@ export default function UsersPage() {
             </table>
           )}
         </div>
+
+      ) : tab === 'pending' ? (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {pending.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-gray-400">
+              <CheckCircle size={32} className="mb-2 opacity-50" />
+              <p className="text-sm">No pending approvals</p>
+            </div>
+          ) : (
+            <>
+              <div className="px-4 py-3 border-b border-gray-100 bg-yellow-50 flex items-center gap-2">
+                <Clock size={14} className="text-yellow-600" />
+                <p className="text-sm text-yellow-700 font-medium">
+                  {pending.length} driver{pending.length > 1 ? 's' : ''} waiting for approval
+                </p>
+              </div>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Name</th>
+                    <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Phone</th>
+                    <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Registered</th>
+                    <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pending.map(u => (
+                    <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{u.name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{u.phone}</td>
+                      <td className="px-4 py-3 text-xs text-gray-400">{formatDate(u.last_seen)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => approve(u.id)}
+                            className="flex items-center gap-1 text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-colors"
+                          >
+                            <CheckCircle size={12} /> Approve
+                          </button>
+                          <button
+                            onClick={() => reject(u.id)}
+                            className="flex items-center gap-1 text-xs border border-red-200 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                          >
+                            <X size={12} /> Reject
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {sessions.length === 0 ? (
