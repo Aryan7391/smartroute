@@ -28,7 +28,7 @@ def my_route(user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Drivers only")
 
     vehicle = get_driver_vehicle(user["id"])
-    stops = supabase.table("stops").select("*, orders(pickup_address, delivery_address, sender_id)") \
+    stops = supabase.table("stops").select("*, orders(pickup_address, delivery_address, sender_id, is_live_injection)") \
         .eq("vehicle_id", vehicle["id"]) \
         .eq("is_done", "False") \
         .order("sequence").execute()
@@ -123,8 +123,10 @@ def confirm_delivery(order_id: str, body: OTPRequest, user=Depends(get_current_u
     return result
 
 
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+
 @router.post("/route-complete", summary="Driver marks route as complete")
-def route_complete(user=Depends(get_current_user)):
+def route_complete(background_tasks: BackgroundTasks, user=Depends(get_current_user)):
     if user["role"] != "driver":
         raise HTTPException(status_code=403, detail="Drivers only")
 
@@ -142,4 +144,5 @@ def route_complete(user=Depends(get_current_user)):
     # Clear all segments for this vehicle
     clear_segments(vehicle["id"])
 
-    return process_queue_for_vehicle(vehicle["id"])
+    background_tasks.add_task(process_queue_for_vehicle, vehicle["id"])
+    return {"message": "Route completed successfully. Checking queue for new orders..."}

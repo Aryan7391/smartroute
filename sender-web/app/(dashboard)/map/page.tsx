@@ -220,7 +220,7 @@ export default function LiveMapPage() {
           <div style="font-family:sans-serif;font-size:13px;min-width:150px">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
               <div style="background:${color};width:12px;height:12px;border-radius:50%"></div>
-              <b>Vehicle ${index + 1}</b>
+              <b>Vehicle ${index + 1} <span style="color:#6b7280;font-size:11px">(${v.id.substring(0, 8).toUpperCase()})</span></b>
             </div>
             <span style="color:#6b7280">${v.users?.name || 'Driver'}</span><br/>
             <span style="color:#16a34a;font-size:12px">● Active</span>
@@ -298,6 +298,24 @@ export default function LiveMapPage() {
     });
   } catch (e) {
     console.error('Segment load error', e);
+  }
+
+  // Draw dynamic live route to the next stop
+  const nextStop = stops.find(s => !s.is_done);
+  if (nextStop && vehicle.current_lat && vehicle.current_lng) {
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${vehicle.current_lng},${vehicle.current_lat};${nextStop.lng},${nextStop.lat}?overview=full&geometries=geojson`;
+      const routeRes = await fetch(url);
+      const routeData = await routeRes.json();
+      if (routeData.routes && routeData.routes.length > 0) {
+        const liveLine = L.geoJSON(routeData.routes[0].geometry, {
+          style: { color: routeColor, weight: 5, opacity: 0.9, dashArray: '10 8' }
+        }).addTo(map);
+        routeLayersRef.current.push(liveLine);
+      }
+    } catch (err) {
+      console.warn("Could not fetch live OSRM route to next stop", err);
+    }
   }
 
   // Fit bounds
@@ -400,7 +418,9 @@ export default function LiveMapPage() {
                           <Truck size={14} className="text-white" />
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-gray-900">Vehicle {index + 1}</p>
+                          <p className="text-sm font-semibold text-gray-900">
+                            Vehicle {index + 1} <span className="text-gray-500 text-xs">({v.id.substring(0, 8).toUpperCase()})</span>
+                          </p>
                           <p className="text-xs text-gray-400">{v.users?.name || 'Driver'}</p>
                         </div>
                       </div>
