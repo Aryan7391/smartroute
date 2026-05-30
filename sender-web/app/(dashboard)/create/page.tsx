@@ -190,7 +190,7 @@ function MapModal({
         </div>
 
         {/* Search */}
-        <div className="relative">
+        <div className="relative z-[1001]">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
@@ -216,7 +216,7 @@ function MapModal({
 
         {/* Search results dropdown */}
         {showResults && results.length > 0 && (
-          <div className="absolute left-4 right-4 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-10 overflow-hidden">
+          <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-[1002] overflow-hidden">
             {results.map((r, i) => (
               <button
                 key={i}

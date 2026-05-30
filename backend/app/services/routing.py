@@ -1,17 +1,22 @@
 from app.db.client import supabase
 from app.utils.geo import haversine_km
 from fastapi import HTTPException
+from app.utils.osrm import save_segments
+
 
 def interleave_stops(vehicle: dict, orders: list) -> list:
     """
     Build an interleaved stop sequence for a vehicle given a list of orders.
-    At each step: go to nearest pickup (if capacity allows) or nearest delivery.
+    At each step: go to nearest pickup (if weight + capacity allows) or nearest delivery.
+    Ensures cumulative weight never exceeds vehicle max_weight at any pickup.
     Returns a list of stops in sequence order.
     """
     stops = []
     pos = {"lat": vehicle["current_lat"], "lng": vehicle["current_lng"]}
     load = 0
+    current_weight = 0.0
     capacity = vehicle["capacity"]
+    max_weight = vehicle.get("max_weight", float("inf"))
     unassigned = list(orders)
     in_vehicle = []
     sequence = 1
@@ -21,13 +26,15 @@ def interleave_stops(vehicle: dict, orders: list) -> list:
 
         if load < capacity:
             for o in unassigned:
-                candidates.append({
-                    "type":    "pickup",
-                    "order":   o,
-                    "lat":     o["pickup_lat"],
-                    "lng":     o["pickup_lng"],
-                    "dist":    haversine_km(pos["lat"], pos["lng"], o["pickup_lat"], o["pickup_lng"])
-                })
+                # Only consider pickup if weight allows
+                if current_weight + o["approx_weight"] <= max_weight:
+                    candidates.append({
+                        "type":  "pickup",
+                        "order": o,
+                        "lat":   o["pickup_lat"],
+                        "lng":   o["pickup_lng"],
+                        "dist":  haversine_km(pos["lat"], pos["lng"], o["pickup_lat"], o["pickup_lng"])
+                    })
 
         for o in in_vehicle:
             candidates.append({
@@ -46,10 +53,12 @@ def interleave_stops(vehicle: dict, orders: list) -> list:
 
         if next_stop["type"] == "pickup":
             load += 1
+            current_weight += next_stop["order"]["approx_weight"]
             in_vehicle.append(next_stop["order"])
             unassigned.remove(next_stop["order"])
         else:
             load -= 1
+            current_weight -= next_stop["order"]["approx_weight"]
             in_vehicle.remove(next_stop["order"])
 
         stops.append({
@@ -70,32 +79,57 @@ def assign_and_build_routes(order_ids: list) -> dict:
     Assign a batch of orders to vehicles and build their routes.
     Called before dispatch.
     """
-    # Fetch all orders
     orders_result = supabase.table("orders").select("*").in_("id", order_ids).execute()
     orders = orders_result.data
     if not orders:
         raise HTTPException(status_code=404, detail="No orders found")
 
-    # Fetch all idle vehicles with their drivers
     vehicles_result = supabase.table("vehicles").select("*").eq("status", "idle").execute()
     vehicles = vehicles_result.data
     if not vehicles:
         raise HTTPException(status_code=400, detail="No idle vehicles available")
 
-    # Assign each order to nearest vehicle
+    # Assign each order to nearest idle vehicle that has weight + capacity headroom
     assignment = {v["id"]: [] for v in vehicles}
+    queued_orders = []
+
     for order in orders:
-        nearest = min(vehicles, key=lambda v: haversine_km(
+        # Sort vehicles by distance to this order's pickup
+        sorted_vehicles = sorted(vehicles, key=lambda v: haversine_km(
             v["current_lat"], v["current_lng"],
             order["pickup_lat"], order["pickup_lng"]
         ))
-        assignment[nearest["id"]].append(order)
-        supabase.table("orders").update({
-            "assigned_vehicle_id": nearest["id"],
-            "status": "pending"
-        }).eq("id", order["id"]).execute()
 
-    # Build routes and save stops for each vehicle
+        assigned = False
+        for vehicle in sorted_vehicles:
+            already_assigned = assignment[vehicle["id"]]
+            current_weight = sum(o["approx_weight"] for o in already_assigned)
+            current_count  = len(already_assigned)
+
+            if current_count >= vehicle["capacity"]:
+                continue
+            if current_weight + order["approx_weight"] > vehicle.get("max_weight", float("inf")):
+                continue
+
+            assignment[vehicle["id"]].append(order)
+            supabase.table("orders").update({
+                "assigned_vehicle_id": vehicle["id"],
+                "status": "pending"
+            }).eq("id", order["id"]).execute()
+            assigned = True
+            break
+
+        if not assigned:
+            queued_orders.append(order["id"])
+            supabase.table("orders").update({"status": "queued"}).eq("id", order["id"]).execute()
+            supabase.table("queue").insert({
+                "order_id": order["id"],
+                "reason": "no vehicle with sufficient capacity or weight headroom"
+            }).execute()
+
+    vehicles_activated = 0
+    total_stops = 0
+
     for vehicle in vehicles:
         assigned_orders = assignment[vehicle["id"]]
         if not assigned_orders:
@@ -103,7 +137,6 @@ def assign_and_build_routes(order_ids: list) -> dict:
 
         stops = interleave_stops(vehicle, assigned_orders)
 
-        # Save stops to DB
         stop_rows = [{
             "vehicle_id": vehicle["id"],
             "order_id":   s["order_id"],
@@ -115,8 +148,18 @@ def assign_and_build_routes(order_ids: list) -> dict:
         } for s in stops]
 
         supabase.table("stops").insert(stop_rows).execute()
-
-        # Set vehicle to active
         supabase.table("vehicles").update({"status": "active"}).eq("id", vehicle["id"]).execute()
 
-    return {"message": f"Routes built for {len(vehicles)} vehicles"}
+        points = [{"lat": vehicle["current_lat"], "lng": vehicle["current_lng"]}] + \
+                 [{"lat": s["lat"], "lng": s["lng"]} for s in stops]
+        save_segments(vehicle["id"], points)
+
+        vehicles_activated += 1
+        total_stops += len(stops)
+
+    return {
+        "message": "Routes built",
+        "vehicles_activated": vehicles_activated,
+        "total_stops": total_stops,
+        "queued_orders": len(queued_orders),
+    }

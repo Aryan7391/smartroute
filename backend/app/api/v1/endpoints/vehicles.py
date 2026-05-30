@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.schemas.vehicle import CreateVehicleRequest, UpdateLocationRequest, VehicleOut
 from app.core.dependencies import get_current_user, require_admin_manager
 from app.db.client import supabase
+from app.utils.osrm import get_segments
 
 router = APIRouter()
 
+
 @router.post("/", response_model=VehicleOut, summary="Register a new vehicle (admin/manager)")
 def create_vehicle(data: CreateVehicleRequest, user=Depends(require_admin_manager)):
-    # Verify driver exists and has driver role
     driver = supabase.table("users").select("id, role").eq("id", data.driver_id).single().execute()
     if not driver.data or driver.data["role"] != "driver":
         raise HTTPException(status_code=400, detail="User is not a driver")
@@ -15,6 +16,7 @@ def create_vehicle(data: CreateVehicleRequest, user=Depends(require_admin_manage
     result = supabase.table("vehicles").insert({
         "driver_id": data.driver_id,
         "capacity":  data.capacity,
+        "max_weight": data.max_weight,
         "status":    "idle",
     }).execute()
 
@@ -26,11 +28,13 @@ def all_vehicles(user=Depends(require_admin_manager)):
     result = supabase.table("vehicles").select("*, users(name, phone)").execute()
     return result.data
 
+
 @router.get("/active", summary="Get all active vehicles with location")
 def active_vehicles(user=Depends(get_current_user)):
     result = supabase.table("vehicles").select("*, users!vehicles_driver_id_fkey(name, phone)") \
         .eq("status", "active").execute()
     return result.data
+
 
 @router.get("/{vehicle_id}", summary="Get a single vehicle")
 def get_vehicle(vehicle_id: str, user=Depends(get_current_user)):
@@ -66,3 +70,8 @@ def update_location(vehicle_id: str, data: UpdateLocationRequest, user=Depends(g
     }).eq("id", vehicle_id).execute()
 
     return {"message": "Location updated"}
+
+
+@router.get("/{vehicle_id}/segments", summary="Get route segments for a vehicle")
+def vehicle_segments(vehicle_id: str, user=Depends(get_current_user)):
+    return get_segments(vehicle_id)

@@ -5,6 +5,7 @@ from app.services.otp import verify_pickup_otp, verify_delivery_otp
 from app.services.queue import process_queue_for_vehicle
 from app.services.notification import notify_sender_driver_coming, notify_receiver_driver_coming
 from pydantic import BaseModel
+from app.utils.osrm import mark_segment_done, clear_segments
 
 router = APIRouter()
 
@@ -77,6 +78,12 @@ def confirm_pickup(order_id: str, body: OTPRequest, user=Depends(get_current_use
 
     result = verify_pickup_otp(order_id, body.otp)
 
+    stop = supabase.table("stops").select("sequence, vehicle_id") \
+        .eq("order_id", order_id).eq("type", "pickup").single().execute()
+    if stop.data:
+        mark_segment_done(stop.data["vehicle_id"], stop.data["sequence"])
+
+
     # Notify receiver via WhatsApp (stub)
     order = supabase.table("orders").select("*, users!orders_sender_id_fkey(phone)") \
         .eq("id", order_id).single().execute()
@@ -100,6 +107,12 @@ def confirm_delivery(order_id: str, body: OTPRequest, user=Depends(get_current_u
 
     result = verify_delivery_otp(order_id, body.otp)
 
+    # Mark segment done
+    stop = supabase.table("stops").select("sequence, vehicle_id") \
+        .eq("order_id", order_id).eq("type", "delivery").single().execute()
+    if stop.data:
+        mark_segment_done(stop.data["vehicle_id"], stop.data["sequence"])
+
     # Notify sender
     order = supabase.table("orders").select("*, users!orders_sender_id_fkey(phone)") \
         .eq("id", order_id).single().execute()
@@ -110,23 +123,23 @@ def confirm_delivery(order_id: str, body: OTPRequest, user=Depends(get_current_u
     return result
 
 
-@router.post("/route-complete", summary="Driver marks route as complete — triggers queue processing")
+@router.post("/route-complete", summary="Driver marks route as complete")
 def route_complete(user=Depends(get_current_user)):
     if user["role"] != "driver":
         raise HTTPException(status_code=403, detail="Drivers only")
 
     vehicle = get_driver_vehicle(user["id"])
 
-    # Check all stops are done
     remaining = supabase.table("stops").select("id") \
         .eq("vehicle_id", vehicle["id"]) \
-        .eq("is_done", "False").execute()
+        .eq("is_done", False).execute()
 
     if remaining.data:
         raise HTTPException(status_code=400, detail=f"{len(remaining.data)} stops still pending")
 
-    # Set vehicle idle
     supabase.table("vehicles").update({"status": "idle"}).eq("id", vehicle["id"]).execute()
 
-    # Process queue
+    # Clear all segments for this vehicle
+    clear_segments(vehicle["id"])
+
     return process_queue_for_vehicle(vehicle["id"])

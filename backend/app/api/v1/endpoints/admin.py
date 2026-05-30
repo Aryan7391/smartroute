@@ -4,6 +4,7 @@ from app.db.client import supabase
 from pydantic import BaseModel
 from app.schemas.auth import RegisterRequest
 from app.services.auth import register_user
+from app.services.routing import assign_and_build_routes
 from typing import Optional
 
 router = APIRouter()
@@ -11,6 +12,43 @@ router = APIRouter()
 class UpdateUserRequest(BaseModel):
     is_active: Optional[bool] = None
     name:      Optional[str]  = None
+
+
+# ── Day controls ──────────────────────────────────────────────
+
+@router.post("/day/start", summary="Start the day — dispatch all pending orders (admin/manager)")
+def start_day(user=Depends(require_admin_manager)):
+    pending = supabase.table("orders").select("id").eq("status", "pending").is_("assigned_vehicle_id", "null").execute()
+    if not pending.data:
+        raise HTTPException(status_code=400, detail="No unassigned pending orders to dispatch")
+
+    order_ids = [o["id"] for o in pending.data]
+    result = assign_and_build_routes(order_ids)
+
+    # Make sure accepting_orders is true at day start
+    supabase.table("system_config").update({"value": "true"}).eq("key", "accepting_orders").execute()
+
+    return {**result, "accepting_orders": True}
+
+
+@router.post("/day/stop", summary="Stop accepting new orders — live injection disabled (admin/manager)")
+def stop_day(user=Depends(require_admin_manager)):
+    supabase.table("system_config").update({"value": "false"}).eq("key", "accepting_orders").execute()
+    return {"message": "Order acceptance stopped. New orders will be queued for tomorrow."}
+
+
+@router.post("/day/resume", summary="Resume accepting orders (admin/manager)")
+def resume_day(user=Depends(require_admin_manager)):
+    supabase.table("system_config").update({"value": "true"}).eq("key", "accepting_orders").execute()
+    return {"message": "Order acceptance resumed."}
+
+
+@router.get("/day/status", summary="Get current accepting_orders status")
+def day_status(user=Depends(require_admin_manager)):
+    res = supabase.table("system_config").select("value").eq("key", "accepting_orders").single().execute()
+    accepting = res.data["value"] == "true" if res.data else True
+    return {"accepting_orders": accepting}
+
 
 # ── Fleet overview ────────────────────────────────────────────
 
@@ -92,8 +130,8 @@ def reschedule(order_id: str, user=Depends(require_admin_manager)):
 
 @router.post("/orders/{order_id}/charge-extra", summary="Apply extra charge to receiver (stub)")
 def charge_extra(order_id: str, user=Depends(require_admin_manager)):
-    # Plug into payment module when ready
     return {"message": f"Extra charge flagged for order {order_id} — payment module pending"}
+
 
 @router.post("/users/create", summary="Create admin/manager/driver account (admin only)")
 def create_user(data: RegisterRequest, user=Depends(require_admin)):

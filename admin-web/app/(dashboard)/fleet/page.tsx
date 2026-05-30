@@ -137,79 +137,80 @@ export default function FleetPage() {
   };
 
   const drawRoute = async (vehicleId: string, stops: Stop[]) => {
-    const L = (await import('leaflet')).default;
-    const map = mapInstanceRef.current;
-    if (!map || !stops.length) return;
+  const L = (await import('leaflet')).default;
+  const map = mapInstanceRef.current;
+  if (!map) return;
 
-    clearRoute();
+  clearRoute();
 
-    const vehicleIndex = vehicles.findIndex(v => v.id === vehicleId);
-    const routeColor = getVehicleColor(vehicleIndex);
-    const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicles.find(v => v.id === vehicleId);
+  if (!vehicle?.current_lat || !vehicle?.current_lng) return;
 
-    // Draw stop markers
-    for (const stop of stops) {
-      const stopColor = stop.type === 'pickup' ? '#16a34a' : '#dc2626';
-      const icon = L.divIcon({
-        html: `<div style="
-          background:${stopColor};
-          width:26px;height:26px;
-          border-radius:50%;
-          display:flex;align-items:center;justify-content:center;
-          color:white;font-size:10px;font-weight:bold;
-          border:2px solid white;
-          box-shadow:0 2px 6px rgba(0,0,0,0.2)
-        ">${stop.sequence}</div>`,
-        className: '',
-        iconSize: [26, 26],
-        iconAnchor: [13, 13],
-      });
+  const vehicleIndex = vehicles.findIndex(v => v.id === vehicleId);
+  const routeColor = getVehicleColor(vehicleIndex);
 
-      const marker = L.marker([stop.lat, stop.lng], { icon })
-        .addTo(map)
-        .bindPopup(`
-          <div style="font-family:sans-serif;font-size:12px">
-            <b>${stop.type.toUpperCase()} #${stop.sequence}</b><br/>
-            ${stop.type === 'pickup' ? stop.orders?.pickup_address || '' : stop.orders?.delivery_address || ''}
-          </div>
-        `);
+  // Draw stop markers
+  stops.forEach(stop => {
+    const stopColor = stop.type === 'pickup' ? '#16a34a' : '#dc2626';
+    const opacity = stop.is_done ? 0.35 : 1;
+    const icon = L.divIcon({
+      html: `<div style="
+        background:${stopColor};
+        width:26px;height:26px;border-radius:50%;
+        display:flex;align-items:center;justify-content:center;
+        color:white;font-size:11px;font-weight:bold;
+        border:2px solid white;
+        box-shadow:0 2px 6px rgba(0,0,0,0.2);
+        opacity:${opacity}
+      ">${stop.sequence}</div>`,
+      className: '',
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+    });
 
-      routeLayersRef.current.push(marker);
-    }
+    const marker = L.marker([stop.lat, stop.lng], { icon })
+      .addTo(map)
+      .bindPopup(`
+        <div style="font-family:sans-serif;font-size:12px">
+          <b>${stop.type.toUpperCase()} #${stop.sequence}</b>
+          ${stop.is_done ? ' ✓' : ''}<br/>
+          ${stop.type === 'pickup' ? stop.orders?.pickup_address || '' : stop.orders?.delivery_address || ''}
+        </div>
+      `);
 
-    // Draw OSRM road path with vehicle color
-    if (vehicle?.current_lat && vehicle?.current_lng) {
-      const points = [
-        { lat: vehicle.current_lat, lng: vehicle.current_lng },
-        ...stops.map(s => ({ lat: s.lat, lng: s.lng }))
-      ];
+    routeLayersRef.current.push(marker);
+  });
 
-      for (let i = 0; i < points.length - 1; i++) {
-        try {
-          const res = await fetch(
-            `https://router.project-osrm.org/route/v1/driving/${points[i].lng},${points[i].lat};${points[i+1].lng},${points[i+1].lat}?overview=full&geometries=geojson`
-          );
-          const data = await res.json();
-          if (data.routes?.[0]) {
-            const line = L.geoJSON(data.routes[0].geometry, {
-              style: { color: routeColor, weight: 4, opacity: 0.75, dashArray: '8 4' }
-            }).addTo(map);
-            routeLayersRef.current.push(line);
-          }
-        } catch (e) {
-          console.error('OSRM error', e);
-        }
-      }
+  // Load segments from DB — no live OSRM call
+  try {
+    const res = await api.get(`/vehicles/${vehicleId}/segments`);
+    const segments = res.data;
 
-      // Fit bounds
-      const allPoints: [number, number][] = [
-        [vehicle.current_lat, vehicle.current_lng],
-        ...stops.map(s => [s.lat, s.lng] as [number, number])
-      ];
-      const bounds = L.latLngBounds(allPoints);
-      map.fitBounds(bounds, { padding: [40, 40] });
-    }
-  };
+    segments.forEach((seg: any) => {
+      const color = seg.is_done ? '#9ca3af' : routeColor;
+      const opacity = seg.is_done ? 0.35 : 0.75;
+      const dashArray = seg.is_done ? '4 4' : '8 4';
+
+      const line = L.geoJSON(seg.geometry, {
+        style: { color, weight: 4, opacity, dashArray }
+      }).addTo(map);
+
+      routeLayersRef.current.push(line);
+    });
+  } catch (e) {
+    console.error('Segment load error', e);
+  }
+
+  // Fit bounds
+  const allPoints: [number, number][] = [
+    [vehicle.current_lat, vehicle.current_lng],
+    ...stops.map(s => [s.lat, s.lng] as [number, number])
+  ];
+  if (allPoints.length > 0) {
+    const bounds = L.latLngBounds(allPoints);
+    map.fitBounds(bounds, { padding: [60, 60] });
+  }
+};
 
   const clearRoute = async () => {
     routeLayersRef.current.forEach(l => l.remove());

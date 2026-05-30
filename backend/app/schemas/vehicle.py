@@ -2,8 +2,9 @@ from pydantic import BaseModel
 from typing import Optional
 
 class CreateVehicleRequest(BaseModel):
-    driver_id: str
-    capacity:  int
+    driver_id:  str
+    capacity:   int
+    max_weight: float
 
 class UpdateLocationRequest(BaseModel):
     lat: float
@@ -13,6 +14,7 @@ class VehicleOut(BaseModel):
     id:          str
     driver_id:   str
     capacity:    int
+    max_weight:  float
     current_lat: Optional[float]
     current_lng: Optional[float]
     status:      str
