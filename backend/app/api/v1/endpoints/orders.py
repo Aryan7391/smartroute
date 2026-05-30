@@ -96,13 +96,27 @@ def fail_pickup(order_id: str, user=Depends(get_current_user)):
     if not result.data:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    supabase.table("orders").update({"status": "failed_pickup"}).eq("id", order_id).execute()
+    # Escalate, clear assignment, and put in queue
+    supabase.table("orders").update({
+        "status": "escalated",
+        "assigned_vehicle_id": None
+    }).eq("id", order_id).execute()
 
-    from app.services.notification import notify_sender_order_failed
+    supabase.table("queue").insert({
+        "order_id": order_id,
+        "reason": "pickup failed — sender not present, escalated and re-queued"
+    }).execute()
+    
+    # Clear stops from driver's route
+    supabase.table("stops").update({"is_done": True}).eq("order_id", order_id).eq("type", "pickup").execute()
+    supabase.table("stops").delete().eq("order_id", order_id).eq("type", "delivery").execute()
+
+    from app.services.notification import notify_sender_order_failed, notify_admin_escalation
     sender = supabase.table("users").select("phone").eq("id", result.data["sender_id"]).single().execute()
     notify_sender_order_failed(sender.data["phone"], order_id)
+    notify_admin_escalation(order_id, "Pickup failed (sender not present)")
 
-    return {"message": "Pickup marked as failed"}
+    return {"message": "Pickup marked as failed, escalated and re-queued"}
 
 
 @router.patch("/{order_id}/fail-delivery", summary="Mark delivery attempt as failed — receiver not present")
@@ -116,23 +130,38 @@ def fail_delivery(order_id: str, user=Depends(get_current_user)):
 
     order = result.data
     attempt = order["attempt_count"] + 1
+    
+    # Mark delivery stop as done so it disappears from driver's screen
+    supabase.table("stops").update({"is_done": True}).eq("order_id", order_id).eq("type", "delivery").execute()
 
     if attempt >= 2:
         supabase.table("orders").update({
             "status": "escalated",
-            "attempt_count": attempt
+            "attempt_count": attempt,
+            "assigned_vehicle_id": None
         }).eq("id", order_id).execute()
+
+        supabase.table("queue").insert({
+            "order_id": order_id,
+            "reason": f"delivery failed {attempt} times — escalated and re-queued"
+        }).execute()
 
         from app.services.notification import notify_admin_escalation
         notify_admin_escalation(order_id, f"Delivery failed {attempt} times")
-        return {"message": "Order escalated to admin after 2 failed attempts"}
+        return {"message": "Order escalated and re-queued after 2 failed attempts"}
 
     supabase.table("orders").update({
-        "status": "failed_delivery",
-        "attempt_count": attempt
+        "status": "queued",
+        "attempt_count": attempt,
+        "assigned_vehicle_id": None
     }).eq("id", order_id).execute()
 
-    return {"message": f"Delivery attempt {attempt} marked as failed"}
+    supabase.table("queue").insert({
+        "order_id": order_id,
+        "reason": f"delivery failed attempt {attempt} — re-queued for next routing"
+    }).execute()
+
+    return {"message": f"Delivery attempt {attempt} marked as failed and re-queued"}
 
 
 @router.patch("/{order_id}/return-to-sender", summary="Mark order for return to sender")

@@ -8,6 +8,7 @@ import {
   StatusBar,
   Alert,
   Platform,
+  TouchableOpacity,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRoute } from '../context/RouteContext';
