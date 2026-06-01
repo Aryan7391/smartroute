@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { Vehicle, Stop } from '@/types';
@@ -46,7 +46,7 @@ const playBeep = () => {
   }
 };
 
-export default function LiveMapPage() {
+function LiveMapContent() {
   const router = useRouter();
   const mapRef = useRef<any>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -540,5 +540,13 @@ export default function LiveMapPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function LiveMapPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-500">Loading map...</div>}>
+      <LiveMapContent />
+    </Suspense>
   );
 }

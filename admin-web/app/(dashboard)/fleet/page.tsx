@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { Vehicle, Stop } from '@/types';
@@ -13,7 +13,7 @@ const VEHICLE_COLORS = [
 
 const getVehicleColor = (index: number) => VEHICLE_COLORS[index % VEHICLE_COLORS.length];
 
-export default function FleetPage() {
+function FleetContent() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [selected, setSelected] = useState<Vehicle | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
@@ -370,5 +370,13 @@ export default function FleetPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function FleetPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-500">Loading map...</div>}>
+      <FleetContent />
+    </Suspense>
   );
 }
