@@ -11,6 +11,9 @@ export default function QueuePage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState('');
 
+  const [dateFilter, setDateFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+
   useEffect(() => {
     fetchQueue();
     const interval = setInterval(fetchQueue, 15000);
@@ -62,20 +65,43 @@ export default function QueuePage() {
 
   const formatDate = (d: string) => new Date(d).toLocaleString();
 
+  // Compute filtered
+  const filtered = queue
+    .filter(o => !dateFilter || (o.queued_at && o.queued_at.startsWith(dateFilter)))
+    .sort((a, b) => {
+      const tA = new Date(a.queued_at).getTime();
+      const tB = new Date(b.queued_at).getTime();
+      return sortOrder === 'desc' ? tB - tA : tA - tB;
+    });
+
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Queue</h1>
           <p className="text-sm text-gray-500 mt-0.5">Orders waiting for a vehicle</p>
         </div>
-        <button
-          onClick={fetchQueue}
-          className="flex items-center gap-2 text-sm text-gray-600 border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50"
-        >
-          <RefreshCw size={14} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={e => setDateFilter(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 hover:bg-gray-100 flex items-center gap-1"
+          >
+            Sort: {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
+          </button>
+          <button
+            onClick={fetchQueue}
+            className="flex items-center gap-2 text-sm text-gray-600 border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 ml-2"
+          >
+            <RefreshCw size={14} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -88,14 +114,14 @@ export default function QueuePage() {
         <div className="flex items-center justify-center h-48">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
         </div>
-      ) : queue.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center h-48 text-gray-400">
           <Clock size={32} className="mb-2 opacity-50" />
           <p className="text-sm">Queue is empty</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {queue.map((item) => (
+          {filtered.map((item) => (
             <div key={item.queue_id} className="bg-white rounded-xl border border-gray-200 p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">

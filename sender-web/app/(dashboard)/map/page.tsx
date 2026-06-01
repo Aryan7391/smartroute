@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { Vehicle, Stop } from '@/types';
 import { Truck, Package, CheckCircle, Circle } from 'lucide-react';
@@ -63,6 +63,10 @@ export default function LiveMapPage() {
   const [locating, setLocating] = useState(false);
   const [toast, setToast] = useState<{ message: string; color: string } | null>(null);
 
+  const searchParams = useSearchParams();
+  const initialVehicleId = searchParams.get('vehicle_id');
+  const initialSelectRef = useRef(false);
+
   // Keep userPos in a ref so fetchVehicles can access latest value
   const userPosRef = useRef<{ lat: number; lng: number } | null>(null);
   useEffect(() => { userPosRef.current = userPos; }, [userPos]);
@@ -77,6 +81,14 @@ export default function LiveMapPage() {
 
   useEffect(() => {
     if (mapInstanceRef.current && vehicles.length >= 0) updateVehicleMarkers();
+
+    if (vehicles.length > 0 && initialVehicleId && !initialSelectRef.current) {
+      const v = vehicles.find(v => v.id === initialVehicleId);
+      if (v) {
+        setSelected(v);
+        initialSelectRef.current = true;
+      }
+    }
   }, [vehicles, selected]);
 
   useEffect(() => {

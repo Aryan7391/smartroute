@@ -357,6 +357,12 @@ export default function CreateOrderPage() {
     setModal(null);
   };
 
+  const idempotencyKeyRef = useRef<string>('');
+
+  useEffect(() => {
+    idempotencyKeyRef.current = crypto.randomUUID();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pickup)   { setError('Please select a pickup location'); return; }
@@ -377,6 +383,7 @@ export default function CreateOrderPage() {
         item_count:       parseInt(form.item_count),
         approx_weight:    parseFloat(form.approx_weight),
         item_description: form.item_description,
+        idempotency_key:  idempotencyKeyRef.current,
       });
       router.push(`/orders/${res.data.id}`);
     } catch (err: any) {

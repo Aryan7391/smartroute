@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from app.schemas.order import CreateOrderRequest, OrderOut
 from app.core.dependencies import get_current_user, require_admin_manager, require_sender
 from app.db.client import supabase
@@ -6,14 +6,20 @@ from app.utils.otp import generate_otp
 from app.utils.system import is_accepting_orders
 from app.services.injection import inject_order
 from app.services.routing import assign_and_build_routes
+from app.core.limiter import limiter
 
 router = APIRouter()
 
-
 @router.post("/", response_model=OrderOut, summary="Create a new order")
-def create_order(data: CreateOrderRequest, user=Depends(get_current_user)):
+@limiter.limit("5/minute")
+def create_order(request: Request, data: CreateOrderRequest, user=Depends(get_current_user)):
     if user["role"] not in ["sender", "admin", "manager"]:
         raise HTTPException(status_code=403, detail="Only senders can place orders")
+
+    if data.idempotency_key:
+        existing = supabase.table("orders").select("*").eq("idempotency_key", data.idempotency_key).execute()
+        if existing.data:
+            return existing.data[0]
 
     pickup_otp = generate_otp()
     accepting  = is_accepting_orders()
@@ -23,6 +29,7 @@ def create_order(data: CreateOrderRequest, user=Depends(get_current_user)):
 
     result = supabase.table("orders").insert({
         "sender_id":           user["id"],
+        "idempotency_key":     data.idempotency_key,
         "pickup_address":      data.pickup_address,
         "pickup_lat":          data.pickup_lat,
         "pickup_lng":          data.pickup_lng,
@@ -55,19 +62,42 @@ def create_order(data: CreateOrderRequest, user=Depends(get_current_user)):
 
 @router.get("/my", summary="Get all orders for current sender")
 def my_orders(user=Depends(get_current_user)):
-    result = supabase.table("orders").select("*").eq("sender_id", user["id"]).order("created_at", desc=True).execute()
-    return result.data
+    result = supabase.table("orders").select("*, queue(reason, created_at)").eq("sender_id", user["id"]).order("created_at", desc=True).execute()
+    
+    orders = result.data
+    for order in orders:
+        if order.get("queue"):
+            if isinstance(order["queue"], list):
+                order["queue"].sort(key=lambda x: x["created_at"], reverse=True)
+                order["escalation_reason"] = order["queue"][0]["reason"] if len(order["queue"]) > 0 else None
+            else:
+                order["escalation_reason"] = order["queue"].get("reason")
+        else:
+            order["escalation_reason"] = None
+        order.pop("queue", None)
+        
+    return orders
 
 
 @router.get("/{order_id}", summary="Get a single order by ID")
 def get_order(order_id: str, user=Depends(get_current_user)):
-    result = supabase.table("orders").select("*").eq("id", order_id).single().execute()
+    result = supabase.table("orders").select("*, queue(reason, created_at)").eq("id", order_id).single().execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Order not found")
 
     order = result.data
     if user["role"] == "sender" and order["sender_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
+
+    if order.get("queue"):
+        if isinstance(order["queue"], list):
+            order["queue"].sort(key=lambda x: x["created_at"], reverse=True)
+            order["escalation_reason"] = order["queue"][0]["reason"] if len(order["queue"]) > 0 else None
+        else:
+            order["escalation_reason"] = order["queue"].get("reason")
+    else:
+        order["escalation_reason"] = None
+    order.pop("queue", None)
 
     return order
 

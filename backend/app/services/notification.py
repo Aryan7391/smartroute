@@ -1,6 +1,10 @@
 # Notification service
 # For now this is a stub — plug in WhatsApp API (e.g. Twilio, Meta Cloud API) later
 
+def notify_sender_assigned(phone: str, order_id: str, vehicle_id: str):
+    """Send SMS/WhatsApp to sender: vehicle has been assigned."""
+    print(f"[NOTIFY] Sender {phone} — vehicle {vehicle_id} assigned to order {order_id}")
+
 def notify_sender_driver_coming(phone: str, order_id: str):
     """Send SMS/WhatsApp to sender: driver is 10 min away."""
     print(f"[NOTIFY] Sender {phone} — driver coming for order {order_id}")

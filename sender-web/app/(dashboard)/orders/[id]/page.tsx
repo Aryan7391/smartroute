@@ -170,16 +170,18 @@ export default function OrderDetailPage() {
 
       {/* Track button */}
       <div className="flex gap-3">
-  <button
-    onClick={() => router.push(`/orders/${order.id}/sticker`)}
-    className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-700 rounded-xl py-3.5 text-sm font-semibold hover:bg-gray-50 transition"
-  >
-    <Printer size={16} />
-    Print Sticker
-  </button>
-  {order.assigned_vehicle_id && order.status === 'picked_up' && (
+  {(order.status === 'pending' || order.status === 'queued') && (
     <button
-      onClick={() => router.push(`/track?vehicle_id=${order.assigned_vehicle_id}&order_id=${order.id}`)}
+      onClick={() => router.push(`/orders/${order.id}/sticker`)}
+      className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-700 rounded-xl py-3.5 text-sm font-semibold hover:bg-gray-50 transition"
+    >
+      <Printer size={16} />
+      Print Sticker
+    </button>
+  )}
+  {order.assigned_vehicle_id && (order.status === 'pending' || order.status === 'picked_up') && (
+    <button
+      onClick={() => router.push(`/map?vehicle_id=${order.assigned_vehicle_id}`)}
       className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white rounded-xl py-3.5 text-sm font-semibold hover:bg-blue-700 transition"
     >
       <Navigation size={16} />
@@ -190,6 +192,15 @@ export default function OrderDetailPage() {
 
       {/* Flags */}
       <div className="mt-4 space-y-2">
+        {order.status === 'escalated' && order.escalation_reason && (
+          <div className="bg-red-50 text-red-700 text-sm px-4 py-3 rounded-xl flex flex-col gap-1 border border-red-100">
+            <div className="flex items-center gap-2 font-semibold">
+              <AlertTriangle size={16} />
+              Order Escalated
+            </div>
+            <p className="pl-6 text-red-600">{order.escalation_reason}</p>
+          </div>
+        )}
         {order.is_live_injection && (
           <div className="bg-purple-50 text-purple-700 text-xs px-4 py-2.5 rounded-lg">
             This was a live injected order

@@ -11,6 +11,9 @@ export default function EscalationsPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState('');
 
+  const [dateFilter, setDateFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+
   useEffect(() => {
     fetchEscalated();
   }, []);
@@ -72,11 +75,36 @@ export default function EscalationsPage() {
 
   const formatDate = (d?: string) => d ? new Date(d).toLocaleString() : '—';
 
+  // Compute filtered
+  const filtered = orders
+    .filter(o => !dateFilter || (o.created_at && o.created_at.startsWith(dateFilter)))
+    .sort((a, b) => {
+      const tA = new Date(a.created_at).getTime();
+      const tB = new Date(b.created_at).getTime();
+      return sortOrder === 'desc' ? tB - tA : tA - tB;
+    });
+
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Escalations</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Orders that failed twice and need manual action</p>
+      <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Escalations</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Orders that failed twice and need manual action</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={e => setDateFilter(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 hover:bg-gray-100 flex items-center gap-1"
+          >
+            Sort: {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -89,14 +117,14 @@ export default function EscalationsPage() {
         <div className="flex items-center justify-center h-48">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
         </div>
-      ) : orders.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center h-48 text-gray-400">
           <AlertTriangle size={32} className="mb-2 opacity-50" />
           <p className="text-sm">No escalations</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {orders.map((order) => (
+          {filtered.map((order) => (
             <div key={order.id} className="bg-white rounded-xl border border-red-100 p-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
@@ -107,6 +135,13 @@ export default function EscalationsPage() {
                       {order.attempt_count} attempts failed
                     </span>
                   </div>
+
+                  {order.escalation_reason && (
+                    <div className="mb-4 bg-red-50 border border-red-100 text-red-700 text-xs px-3 py-2 rounded-lg">
+                      <span className="font-semibold mr-1">Reason:</span>
+                      {order.escalation_reason}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3 text-sm mb-3">
                     <div>

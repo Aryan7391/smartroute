@@ -15,7 +15,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { colors, typography, spacing, borderRadius, shadows } from '../theme';
 
-export default function LoginScreen() {
+export default function LoginScreen({ navigation }) {
   const { login } = useAuth();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -112,6 +112,15 @@ export default function LoginScreen() {
             <Text style={styles.loginButtonText}>Sign In</Text>
           )}
         </Pressable>
+
+        <TouchableOpacity 
+          style={styles.registerLink} 
+          onPress={() => navigation.navigate('Register')}
+        >
+          <Text style={styles.registerText}>
+            Don't have an account? <Text style={styles.registerTextBold}>Sign Up</Text>
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.footer}>SmartRoute Logistics © 2026</Text>
@@ -215,6 +224,20 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamilyBold,
     fontSize: typography.lg,
     color: colors.textOnPrimary,
+  },
+  registerLink: {
+    marginTop: spacing.md,
+    alignItems: 'center',
+    padding: spacing.xs,
+  },
+  registerText: {
+    fontFamily: typography.fontFamily,
+    fontSize: typography.sm,
+    color: colors.textSecondary,
+  },
+  registerTextBold: {
+    fontFamily: typography.fontFamilyBold,
+    color: colors.primary,
   },
   footer: {
     fontFamily: typography.fontFamily,

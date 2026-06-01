@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { Vehicle, Stop } from '@/types';
 import { Truck, MapPin, CheckCircle, Circle } from 'lucide-react';
@@ -21,6 +22,10 @@ export default function FleetPage() {
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const routeLayersRef = useRef<any[]>([]);
+  
+  const searchParams = useSearchParams();
+  const initialVehicleId = searchParams.get('vehicle_id');
+  const initialSelectRef = useRef(false);
 
   useEffect(() => {
     fetchVehicles();
@@ -35,6 +40,15 @@ export default function FleetPage() {
 
   useEffect(() => {
     if (mapInstanceRef.current && vehicles.length >= 0) updateMapMarkers();
+    
+    // Auto-select from URL parameter on first load
+    if (vehicles.length > 0 && initialVehicleId && !initialSelectRef.current) {
+      const v = vehicles.find(v => v.id === initialVehicleId);
+      if (v) {
+        setSelected(v);
+        initialSelectRef.current = true;
+      }
+    }
   }, [vehicles, selected]);
 
   useEffect(() => {

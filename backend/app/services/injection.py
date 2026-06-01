@@ -159,6 +159,11 @@ def _assign_to_idle(vehicle: dict, order: dict, background_tasks: BackgroundTask
     else:
         save_segments(vehicle["id"], points)
 
+    from app.services.notification import notify_sender_assigned
+    sender_res = supabase.table("users").select("phone").eq("id", order["sender_id"]).single().execute()
+    if sender_res.data and sender_res.data.get("phone"):
+        notify_sender_assigned(sender_res.data["phone"], order["id"], vehicle["id"])
+
     return {"message": f"Order assigned to idle vehicle {vehicle['id']}", "vehicle_id": vehicle["id"]}
 
 
@@ -203,6 +208,11 @@ def _insert_into_route(vehicle: dict, order: dict, remaining: list, insert_at: i
         background_tasks.add_task(save_segments, vehicle["id"], new_points, pickup_seq - 1)
     else:
         save_segments(vehicle["id"], new_points, start_sequence=pickup_seq - 1)
+
+    from app.services.notification import notify_sender_assigned
+    sender_res = supabase.table("users").select("phone").eq("id", order["sender_id"]).single().execute()
+    if sender_res.data and sender_res.data.get("phone"):
+        notify_sender_assigned(sender_res.data["phone"], order["id"], vehicle["id"])
 
     return {"message": f"Order injected into active vehicle {vehicle['id']}", "vehicle_id": vehicle["id"]}
 

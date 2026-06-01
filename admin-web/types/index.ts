@@ -41,6 +41,7 @@ export interface Order {
   created_at: string;
   picked_up_at?: string;
   delivered_at?: string;
+  escalation_reason?: string;
 }
 
 export interface Stop {

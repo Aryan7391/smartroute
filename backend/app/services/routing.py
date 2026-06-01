@@ -74,6 +74,8 @@ def interleave_stops(vehicle: dict, orders: list) -> list:
     return stops
 
 
+from app.services.notification import notify_sender_assigned
+
 def assign_and_build_routes(order_ids: list, background_tasks: BackgroundTasks = None) -> dict:
     """
     Assign a batch of orders to vehicles and build their routes.
@@ -83,6 +85,10 @@ def assign_and_build_routes(order_ids: list, background_tasks: BackgroundTasks =
     orders = orders_result.data
     if not orders:
         raise HTTPException(status_code=404, detail="No orders found")
+
+    sender_ids = list({o["sender_id"] for o in orders})
+    senders_result = supabase.table("users").select("id, phone").in_("id", sender_ids).execute()
+    sender_phones = {s["id"]: s["phone"] for s in senders_result.data} if senders_result.data else {}
 
     vehicles_result = supabase.table("vehicles").select("*").eq("status", "idle").execute()
     vehicles = vehicles_result.data
@@ -116,6 +122,11 @@ def assign_and_build_routes(order_ids: list, background_tasks: BackgroundTasks =
                 "assigned_vehicle_id": vehicle["id"],
                 "status": "pending"
             }).eq("id", order["id"]).execute()
+            
+            phone = sender_phones.get(order["sender_id"])
+            if phone:
+                notify_sender_assigned(phone, order["id"], vehicle["id"])
+                
             assigned = True
             break
 

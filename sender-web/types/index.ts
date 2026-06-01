@@ -23,6 +23,7 @@ export interface Order {
   item_count?:       number;
   approx_weight?:    number;
   item_description?: string;
+  escalation_reason?: string;
 }
 
 export interface Vehicle {

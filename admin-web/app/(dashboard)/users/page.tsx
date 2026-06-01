@@ -16,6 +16,9 @@ export default function UsersPage() {
   const [newUser, setNewUser] = useState({ name: '', phone: '', password: '', email: '' });
   const [addLoading, setAddLoading] = useState(false);
 
+  const [dateFilter, setDateFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchSessions, 15000);
@@ -122,26 +125,54 @@ export default function UsersPage() {
 
   const formatDate = (d?: string) => d ? new Date(d).toLocaleString() : '—';
 
+  const filterByDateAndSort = (arr: any[], dateField: string) => {
+    return arr
+      .filter(item => !dateFilter || (item[dateField] && item[dateField].startsWith(dateFilter)))
+      .sort((a, b) => {
+        const tA = a[dateField] ? new Date(a[dateField]).getTime() : 0;
+        const tB = b[dateField] ? new Date(b[dateField]).getTime() : 0;
+        return sortOrder === 'desc' ? tB - tA : tA - tB;
+      });
+  };
+
+  const filteredUsers = filterByDateAndSort(users, 'created_at');
+  const filteredPending = filterByDateAndSort(pending, 'created_at');
+  const filteredSessions = filterByDateAndSort(sessions, 'logged_in_at');
+
   const tabs = [
-    { key: 'managers' as const, label: `Managers (${users.length})` },
-    { key: 'pending'  as const, label: `Pending Drivers (${pending.length})`, alert: pending.length > 0 },
-    { key: 'sessions' as const, label: `Sessions (${sessions.length})` },
+    { key: 'managers' as const, label: `Managers (${filteredUsers.length})` },
+    { key: 'pending'  as const, label: `Pending Drivers (${filteredPending.length})`, alert: filteredPending.length > 0 },
+    { key: 'sessions' as const, label: `Sessions (${filteredSessions.length})` },
   ];
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Users</h1>
           <p className="text-sm text-gray-500 mt-0.5">Manage managers, drivers and active sessions</p>
         </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          <Plus size={15} />
-          Add Manager
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={e => setDateFilter(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 hover:bg-gray-100 flex items-center gap-1"
+          >
+            Sort: {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
+          </button>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 ml-2"
+          >
+            <Plus size={15} />
+            Add Manager
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -206,7 +237,7 @@ export default function UsersPage() {
 
       ) : tab === 'managers' ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          {users.length === 0 ? (
+          {filteredUsers.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-gray-400">
               <Users size={32} className="mb-2 opacity-50" />
               <p className="text-sm">No managers yet</p>
@@ -224,7 +255,7 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map(u => (
+                {filteredUsers.map(u => (
                   <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{u.name}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{u.phone}</td>
@@ -266,7 +297,7 @@ export default function UsersPage() {
 
       ) : tab === 'pending' ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          {pending.length === 0 ? (
+          {filteredPending.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-gray-400">
               <CheckCircle size={32} className="mb-2 opacity-50" />
               <p className="text-sm">No pending approvals</p>
@@ -276,7 +307,7 @@ export default function UsersPage() {
               <div className="px-4 py-3 border-b border-gray-100 bg-yellow-50 flex items-center gap-2">
                 <Clock size={14} className="text-yellow-600" />
                 <p className="text-sm text-yellow-700 font-medium">
-                  {pending.length} driver{pending.length > 1 ? 's' : ''} waiting for approval
+                  {filteredPending.length} driver{filteredPending.length > 1 ? 's' : ''} waiting for approval
                 </p>
               </div>
               <table className="w-full">
@@ -289,11 +320,11 @@ export default function UsersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pending.map(u => (
+                  {filteredPending.map(u => (
                     <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{u.name}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{u.phone}</td>
-                      <td className="px-4 py-3 text-xs text-gray-400">{formatDate(u.last_seen)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-400">{formatDate(u.created_at)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <button
@@ -320,7 +351,7 @@ export default function UsersPage() {
 
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          {sessions.length === 0 ? (
+          {filteredSessions.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-gray-400">
               <Shield size={32} className="mb-2 opacity-50" />
               <p className="text-sm">No active sessions</p>
@@ -338,7 +369,7 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {sessions.map(s => (
+                {filteredSessions.map(s => (
                   <tr key={s.session_id} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.name}</td>
                     <td className="px-4 py-3">

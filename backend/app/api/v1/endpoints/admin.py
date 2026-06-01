@@ -60,32 +60,54 @@ def fleet(user=Depends(require_admin_manager)):
 
 @router.get("/orders", summary="All orders with status")
 def all_orders(user=Depends(require_admin_manager)):
-    result = supabase.table("orders").select("*").order("created_at", desc=True).execute()
-    return result.data
+    result = supabase.table("orders").select("*, queue(reason, created_at)").order("created_at", desc=True).execute()
+    orders = result.data
+    for order in orders:
+        if order.get("queue"):
+            if isinstance(order["queue"], list):
+                order["queue"].sort(key=lambda x: x["created_at"], reverse=True)
+                order["escalation_reason"] = order["queue"][0]["reason"] if len(order["queue"]) > 0 else None
+            else:
+                order["escalation_reason"] = order["queue"].get("reason")
+        else:
+            order["escalation_reason"] = None
+        order.pop("queue", None)
+    return orders
 
 
 @router.get("/orders/escalated", summary="All escalated orders needing attention")
 def escalated_orders(user=Depends(require_admin_manager)):
-    result = supabase.table("orders").select("*").eq("status", "escalated").execute()
-    return result.data
+    result = supabase.table("orders").select("*, queue(reason, created_at)").eq("status", "escalated").order("created_at", desc=True).execute()
+    orders = result.data
+    for order in orders:
+        if order.get("queue"):
+            if isinstance(order["queue"], list):
+                order["queue"].sort(key=lambda x: x["created_at"], reverse=True)
+                order["escalation_reason"] = order["queue"][0]["reason"] if len(order["queue"]) > 0 else None
+            else:
+                order["escalation_reason"] = order["queue"].get("reason")
+        else:
+            order["escalation_reason"] = None
+        order.pop("queue", None)
+    return orders
 
 
 @router.get("/queue", summary="Current queue")
 def view_queue(user=Depends(require_admin_manager)):
-    result = supabase.table("queue_detail").select("*").execute()
+    result = supabase.table("queue_detail").select("*").order("queued_at", desc=True).execute()
     return result.data
 
 
 # ── User management (admin only) ──────────────────────────────
 
-@router.get("/users", summary="All users (admin only)")
-def all_users(user=Depends(require_admin)):
-    result = supabase.table("users").select("id, name, phone, email, role, is_active, last_seen, created_at").execute()
+@router.get("/users", summary="All users (admin/manager)")
+def all_users(user=Depends(require_admin_manager)):
+    result = supabase.table("users").select("id, name, phone, email, role, is_active, last_seen, created_at").order("created_at", desc=True).execute()
     return result.data
 
 
-@router.patch("/users/{user_id}", summary="Update a user — activate/deactivate (admin only)")
-def update_user(user_id: str, data: UpdateUserRequest, user=Depends(require_admin)):
+@router.patch("/users/{user_id}", summary="Update a user — activate/deactivate (admin/manager)")
+def update_user(user_id: str, data: UpdateUserRequest, user=Depends(require_admin_manager)):
     updates = {k: v for k, v in data.dict().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
@@ -94,20 +116,20 @@ def update_user(user_id: str, data: UpdateUserRequest, user=Depends(require_admi
     return {"message": "User updated"}
 
 
-@router.get("/sessions", summary="All active sessions (admin only)")
-def sessions(user=Depends(require_admin)):
+@router.get("/sessions", summary="All active sessions (admin/manager)")
+def sessions(user=Depends(require_admin_manager)):
     result = supabase.table("active_sessions").select("*").execute()
     return result.data
 
 
-@router.delete("/sessions/{session_id}", summary="Kick a session (admin only)")
-def kick_session(session_id: str, user=Depends(require_admin)):
+@router.delete("/sessions/{session_id}", summary="Kick a session (admin/manager)")
+def kick_session(session_id: str, user=Depends(require_admin_manager)):
     supabase.table("sessions").update({"is_active": False}).eq("id", session_id).execute()
     return {"message": "Session terminated"}
 
 
-@router.delete("/sessions/user/{user_id}", summary="Kick all sessions for a user (admin only)")
-def kick_user_sessions(user_id: str, user=Depends(require_admin)):
+@router.delete("/sessions/user/{user_id}", summary="Kick all sessions for a user (admin/manager)")
+def kick_user_sessions(user_id: str, user=Depends(require_admin_manager)):
     supabase.table("sessions").update({"is_active": False}).eq("user_id", user_id).eq("is_active", True).execute()
     return {"message": "All sessions terminated for user"}
 
@@ -133,6 +155,6 @@ def charge_extra(order_id: str, user=Depends(require_admin_manager)):
     return {"message": f"Extra charge flagged for order {order_id} — payment module pending"}
 
 
-@router.post("/users/create", summary="Create admin/manager/driver account (admin only)")
-def create_user(data: RegisterRequest, user=Depends(require_admin)):
+@router.post("/users/create", summary="Create admin/manager/driver account (admin/manager)")
+def create_user(data: RegisterRequest, user=Depends(require_admin_manager)):
     return register_user(data)

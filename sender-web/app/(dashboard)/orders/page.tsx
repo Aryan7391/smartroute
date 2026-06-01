@@ -70,6 +70,12 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
             <p className="text-sm text-gray-700">{order.delivery_address}</p>
           </div>
         </div>
+        {order.status === 'escalated' && order.escalation_reason && (
+          <div className="mt-2 bg-red-50 text-red-700 text-xs px-3 py-2 rounded-lg border border-red-100 flex items-start gap-1.5">
+            <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+            <span>{order.escalation_reason}</span>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between pt-3 border-t border-gray-100">

@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { Order } from '@/types';
-import { Package, Search, Filter } from 'lucide-react';
+import { Package, Search, Filter, MapPin } from 'lucide-react';
 
 const STATUS_COLORS: Record<string, string> = {
   pending:          'bg-yellow-100 text-yellow-700',
@@ -20,6 +21,7 @@ const STATUS_COLORS: Record<string, string> = {
 const STATUSES = ['all', 'pending', 'picked_up', 'delivered', 'failed_pickup', 'failed_delivery', 'escalated', 'queued', 'return_to_sender'];
 
 export default function OrdersPage() {
+  const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [filtered, setFiltered] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,26 +29,36 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selected, setSelected] = useState<Order | null>(null);
 
+  const [dateFilter, setDateFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+
   useEffect(() => {
     fetchOrders();
   }, []);
 
   useEffect(() => {
-    let result = orders;
+    let result = [...orders];
     if (statusFilter !== 'all') result = result.filter(o => o.status === statusFilter);
     if (search) result = result.filter(o =>
       o.pickup_address.toLowerCase().includes(search.toLowerCase()) ||
       o.delivery_address.toLowerCase().includes(search.toLowerCase()) ||
       o.id.includes(search)
     );
+    if (dateFilter) {
+      result = result.filter(o => o.created_at && o.created_at.startsWith(dateFilter));
+    }
+    result.sort((a, b) => {
+      const tA = new Date(a.created_at).getTime();
+      const tB = new Date(b.created_at).getTime();
+      return sortOrder === 'desc' ? tB - tA : tA - tB;
+    });
     setFiltered(result);
-  }, [orders, statusFilter, search]);
+  }, [orders, statusFilter, search, dateFilter, sortOrder]);
 
   const fetchOrders = async () => {
     try {
       const res = await api.get('/admin/orders');
       setOrders(res.data);
-      setFiltered(res.data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -64,16 +76,32 @@ export default function OrdersPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-48">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search by address or order ID..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-col gap-4">
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="relative flex-1 min-w-48">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search by address or order ID..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 hover:bg-gray-100 flex items-center gap-1"
+            >
+              Sort: {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Filter size={15} className="text-gray-400" />
@@ -158,6 +186,12 @@ export default function OrdersPage() {
                   {selected.status.replace('_', ' ')}
                 </span>
               </div>
+              {selected.escalation_reason && (
+                <div>
+                  <p className="text-xs text-red-500 mb-0.5 font-medium">Escalation Reason</p>
+                  <p className="text-red-700 text-xs bg-red-50 p-2 rounded-lg border border-red-100">{selected.escalation_reason}</p>
+                </div>
+              )}
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">Pickup</p>
                 <p className="text-gray-700">{selected.pickup_address}</p>
@@ -209,6 +243,16 @@ export default function OrdersPage() {
                 <div className="bg-orange-50 text-orange-700 text-xs px-3 py-2 rounded-lg">
                   Return to sender
                 </div>
+              )}
+              
+              {selected.assigned_vehicle_id && (selected.status === 'pending' || selected.status === 'picked_up') && (
+                <button
+                  onClick={() => router.push(`/fleet?vehicle_id=${selected.assigned_vehicle_id}`)}
+                  className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition mt-2"
+                >
+                  <MapPin size={14} />
+                  Track Vehicle
+                </button>
               )}
             </div>
           </div>

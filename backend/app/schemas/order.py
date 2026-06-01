@@ -25,6 +25,7 @@ class CreateOrderRequest(BaseModel):
     item_count:       int
     approx_weight:    float
     item_description: str
+    idempotency_key:  Optional[str] = None
 
 class OrderOut(BaseModel):
     id:                  str
