@@ -1,4 +1,4 @@
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://smartroute-production.up.railway.app/api/v1';
 // 10.0.2.2 is Android emulator's alias for host machine localhost
 // For iOS simulator, use 'http://localhost:8000/api/v1'
 // For physical device, use your LAN IP e.g. 'http://192.168.x.x:8000/api/v1'
