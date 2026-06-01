@@ -1,0 +1,6 @@
+# Ignore heavy folders for EAS builds to speed up uploads!
+backend/
+admin-web/
+sender-web/
+.git/
+driver-apk.zip

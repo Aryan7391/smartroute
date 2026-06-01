@@ -1,0 +1,6 @@
+# Ignore everything outside the expo project to save upload time
+../backend/
+../admin-web/
+../sender-web/
+../.git/
+driver-apk.zip
