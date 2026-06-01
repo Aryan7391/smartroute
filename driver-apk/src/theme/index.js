@@ -1,3 +1,5 @@
+import { moderateScale } from '../utils/responsive';
+
 export const colors = {
   primary: '#2563EB',
   primaryLight: '#3B82F6',
@@ -39,22 +41,22 @@ export const typography = {
   fontFamilySemiBold: 'Inter-SemiBold',
   fontFamilyBold: 'Inter-Bold',
 
-  xs: 11,
-  sm: 13,
-  md: 15,
-  lg: 18,
-  xl: 22,
-  xxl: 28,
-  xxxl: 34,
+  xs: moderateScale(11),
+  sm: moderateScale(13),
+  md: moderateScale(15),
+  lg: moderateScale(18),
+  xl: moderateScale(22),
+  xxl: moderateScale(28),
+  xxxl: moderateScale(34),
 };
 
 export const spacing = {
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-  xxl: 48,
+  xs: moderateScale(4),
+  sm: moderateScale(8),
+  md: moderateScale(16),
+  lg: moderateScale(24),
+  xl: moderateScale(32),
+  xxl: moderateScale(48),
 };
 
 export const borderRadius = {
